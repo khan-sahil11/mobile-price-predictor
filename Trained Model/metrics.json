@@ -1,0 +1,38 @@
+{
+  "model_name": "Random Forest",
+  "rmse": 10136.324355150497,
+  "r2": 0.842700525805013,
+  "min_price": 8415.0,
+  "brands": [
+    "Apple",
+    "Asus",
+    "Blackberry",
+    "CAT",
+    "Google",
+    "Huawei",
+    "LG",
+    "Motorola",
+    "Nokia",
+    "OnePlus",
+    "Oppo",
+    "Realme",
+    "Samsung",
+    "Sony",
+    "Vivo",
+    "Xiaomi"
+  ],
+  "caps": {
+    "Screen_inch": [
+      6.200000000000001,
+      6.839999999999998
+    ],
+    "Battery_mAh": [
+      3250.0,
+      6050.0
+    ],
+    "Main_Camera_MP": [
+      -63.5,
+      140.5
+    ]
+  }
+}
