@@ -1,85 +1,68 @@
 # prepare_data.py
-# Purpose: read the raw CSV, convert text columns to numbers using regex,
-# and save a clean CSV that is ready for model training.
+# Purpose: read the raw dataset, pick the useful columns, give them the names the
+# model expects, fix small problems, and save clean_phones.csv for training.
 
-import re                      # regex library: finds patterns inside text
+from pathlib import Path
 import numpy as np
 import pandas as pd
-from pathlib import Path
 
-USD_TO_INR = 85                # assumed exchange rate; change it if you want
-
-# Build file paths relative to this file (works on any laptop)
-BASE = Path(__file__).parent.parent
-raw_path = BASE / "Dataset" / "Mobile phone price.csv"
+BASE = Path(__file__).parent.parent                     # project folder, works on any laptop
+raw_path = BASE / "Dataset" / "smartphone_cleaned_v5.csv"
 out_path = BASE / "Dataset" / "clean_phones.csv"
 
-# utf-8-sig removes the invisible BOM character stuck to the first column name
-df = pd.read_csv(raw_path, encoding="utf-8-sig")
+df = pd.read_csv(raw_path)
+print("Raw shape:", df.shape)
 
-# Some headers have trailing spaces ("Storage ", "RAM "), so strip them
-df.columns = df.columns.str.strip()
-print("Columns:", df.columns.tolist())
-print("Rows before cleaning:", len(df))
+# Brands are lowercase in the raw file ("oneplus"). Map special ones to proper
+# display names so the app dropdown looks right. Others just get Title Case.
+# "redmi" is Xiaomi's own sub-brand, so we count it as Xiaomi.
+SPECIAL = {"oneplus": "OnePlus", "iqoo": "iQOO", "poco": "POCO", "oppo": "OPPO",
+           "tecno": "Tecno", "itel": "itel", "ikall": "iKall", "lg": "LG",
+           "zte": "ZTE", "tcl": "TCL", "lyf": "Lyf", "blu": "BLU", "cat": "CAT",
+           "redmi": "Xiaomi"}
+brand = df["brand_name"].astype(str).str.strip().str.lower()
 
-
-# ---------- regex helper functions ----------
-
-def first_number(text):
-    """Return the first number in a text, e.g. '6.67 inches' -> 6.67"""
-    text = str(text).replace(",", "")                # '1,199' -> '1199'
-    match = re.search(r"\d+(?:\.\d+)?", text)        # digits, optional .digits
-    return float(match.group()) if match else np.nan
-
-def to_gb(text):
-    """'128 GB' -> 128, '1 TB' -> 1024, '512 MB' -> 0.5"""
-    text = str(text).upper().replace(",", "")
-    match = re.search(r"(\d+(?:\.\d+)?)\s*(TB|GB|MB)?", text)
-    if not match:
-        return np.nan
-    value = float(match.group(1))
-    unit = match.group(2)
-    if unit == "TB":
-        value *= 1024                                # 1 TB = 1024 GB
-    elif unit == "MB":
-        value /= 1024
-    return value
-
-def camera_info(text):
-    """'108 + 10 + 10 + 12' -> (main=108, count=4)"""
-    numbers = re.findall(r"\d+(?:\.\d+)?", str(text))   # all numbers in the text
-    if not numbers:
-        return pd.Series([np.nan, np.nan])
-    return pd.Series([float(numbers[0]), len(numbers)])
-
-
-# ---------- build the clean table ----------
+# Build the clean table: keep only the useful columns and rename them
 clean = pd.DataFrame()
-clean["Brand"] = df["Brand"].astype(str).str.strip()
+clean["Brand"] = brand.map(SPECIAL).fillna(brand.str.title())
+clean["RAM_GB"] = df["ram_capacity"]
+clean["Storage_GB"] = df["internal_memory"]
+clean["Screen_inch"] = df["screen_size"]
+clean["Battery_mAh"] = df["battery_capacity"]
+clean["Main_Camera_MP"] = df["primary_camera_rear"]
+clean["Num_Cameras"] = df["num_rear_cameras"]
+clean["OS"] = np.where(clean["Brand"] == "Apple", "iOS", "Android")   # Apple = iOS, else Android
+clean["Is_5G"] = df["has_5g"].astype(int)                             # True/False -> 1/0
+clean["Price_INR"] = df["price"]                                      # target, already in rupees
 
-clean["RAM_GB"] = df["RAM"].apply(to_gb)
-clean["Storage_GB"] = df["Storage"].apply(to_gb)
-clean["Screen_inch"] = df["Screen Size (inches)"].apply(first_number)
-clean["Battery_mAh"] = pd.to_numeric(df["Battery Capacity (mAh)"], errors="coerce")
-clean[["Main_Camera_MP", "Num_Cameras"]] = df["Camera (MP)"].apply(camera_info)
+# Keep only mainstream brands that are relevant today.
+# Old or discontinued brands (Blackberry, iKall, Letv, Vertu etc.) are removed so the
+# app dropdown is short and the model learns from brands people actually buy.
+KEEP = ["Apple", "Samsung", "Xiaomi", "POCO", "Realme", "OnePlus", "OPPO", "Vivo",
+        "iQOO", "Motorola", "Google", "Nothing", "Tecno", "Infinix", "Nokia",
+        "Lava", "Asus", "itel"]
+before_brand = len(clean)
+clean = clean[clean["Brand"].isin(KEEP)]
+print("Removed rows from minor/old brands:", before_brand - len(clean))
 
-# New feature 1: OS from brand (Apple -> iOS, others -> Android)
-clean["OS"] = np.where(clean["Brand"].str.lower() == "apple", "iOS", "Android")
+# Missing battery values (a few rows, mostly iPhones, which don't list mAh):
+# fill with the median battery of the SAME brand, so an iPhone gets an iPhone-like value
+clean["Battery_mAh"] = clean.groupby("Brand")["Battery_mAh"].transform(
+    lambda s: s.fillna(s.median()))
+clean["Battery_mAh"] = clean["Battery_mAh"].fillna(clean["Battery_mAh"].median())  # safety net
 
-# New feature 2: is the phone 5G? (look for '5G' in the model name)
-clean["Is_5G"] = df["Model"].str.contains(r"5G", case=False, regex=True).astype(int)
+# Remove luxury/collector phones above Rs. 2,00,000 (e.g. Vertu at 6,50,000).
+# They are not normal phones and would distort the model.
+before = len(clean)
+clean = clean[clean["Price_INR"] <= 200000]
+print("Removed luxury outliers:", before - len(clean))
 
-# Target: price in USD -> number -> INR
-clean["Price_INR"] = df["Price ($)"].apply(first_number) * USD_TO_INR
+clean = clean.drop_duplicates()                       # remove repeated rows
 
-# ---------- final cleaning ----------
-clean = clean.dropna(subset=["Price_INR"])           # a row without target is useless
-clean = clean.drop_duplicates()                      # remove repeated rows
-
-print("Rows after cleaning:", len(clean))
+print("Clean shape:", clean.shape)
+print("Brands kept:", clean["Brand"].nunique())
 print(clean.dtypes)
 print(clean.isnull().sum())
 print(clean.head())
-
 clean.to_csv(out_path, index=False)
 print("Saved to:", out_path)

@@ -1,38 +1,40 @@
 {
-  "model_name": "Random Forest",
-  "rmse": 10136.324355150497,
-  "r2": 0.842700525805013,
-  "min_price": 8415.0,
+  "model_name": "Gradient Boosting",
+  "rmse": 10085.509840859113,
+  "r2": 0.8807479624066533,
+  "min_price": 3499.0,
   "brands": [
     "Apple",
     "Asus",
-    "Blackberry",
-    "CAT",
     "Google",
-    "Huawei",
-    "LG",
+    "Infinix",
+    "Lava",
     "Motorola",
     "Nokia",
+    "Nothing",
+    "OPPO",
     "OnePlus",
-    "Oppo",
+    "POCO",
     "Realme",
     "Samsung",
-    "Sony",
+    "Tecno",
     "Vivo",
-    "Xiaomi"
+    "Xiaomi",
+    "iQOO",
+    "itel"
   ],
   "caps": {
     "Screen_inch": [
-      6.200000000000001,
-      6.839999999999998
+      6.245,
+      6.925
     ],
     "Battery_mAh": [
-      3250.0,
-      6050.0
+      3750.0,
+      5750.0
     ],
     "Main_Camera_MP": [
-      -63.5,
-      140.5
+      24.0,
+      88.0
     ]
   }
 }
